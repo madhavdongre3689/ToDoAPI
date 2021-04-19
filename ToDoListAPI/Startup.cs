@@ -13,6 +13,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ToDoListAPI.Entities;
+using ToDoListAPI.Models;
+using Microsoft.AspNetCore.Identity;
+using ToDoListAPI.Identity;
+using Microsoft.IdentityModel.Logging;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace ToDoListAPI
 {
@@ -28,13 +34,31 @@ namespace ToDoListAPI
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            var jwtOptions = new JwtOptions();
+            IdentityModelEventSource.ShowPII = true;
+            Configuration.GetSection("jwt").Bind(jwtOptions);
+            services.AddSingleton(jwtOptions);
 
-            services.AddControllers();
-
-            services.AddDbContext<ToDoContext>(options =>
+            services.AddAuthentication(options =>
             {
-                options.UseSqlServer(Configuration.GetConnectionString(""));
+                options.DefaultAuthenticateScheme = "Bearer";
+                options.DefaultScheme = "Bearer";
+                options.DefaultChallengeScheme = "Bearer";
+            }).AddJwtBearer(cfg =>
+            {
+                cfg.RequireHttpsMetadata = false;
+                cfg.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidIssuer = jwtOptions.JwtIssuer,
+                    ValidAudience = jwtOptions.JwtIssuer,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.JwtKey))
+                };
             });
+            services.AddControllers();
+            services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+            services.AddScoped<IJwtProvider, JwtProvider>();
+            services.AddDbContext<ToDoContext>();
+            services.AddScoped<TodoSeeder>();
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "ToDoListAPI", Version = "v1" });
@@ -42,15 +66,19 @@ namespace ToDoListAPI
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, TodoSeeder todoSeeder)
         {
+
+            app.UseStaticFiles();
+            app.UseCors("FrontEndClient");
+            app.UseSwagger();
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
                 app.UseSwagger();
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ToDoListAPI v1"));
             }
-
+            app.UseAuthentication();
             app.UseHttpsRedirection();
 
             app.UseRouting();
@@ -61,6 +89,8 @@ namespace ToDoListAPI
             {
                 endpoints.MapControllers();
             });
+
+           todoSeeder.Seed();
         }
     }
 }

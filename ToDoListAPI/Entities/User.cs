@@ -18,7 +18,6 @@ namespace ToDoListAPI.Entities
 
         public string PasswordHash { get; set; }
 
-        public int TodoListId { get; set; }
-        public ToDoList TodoList { get; set; }
+        public List<ToDoItem> TodoItems { get; set; }
     }
 }
